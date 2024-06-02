@@ -1,0 +1,3 @@
+raw_folder_path = "/mnt/testdemo810/raw"
+processed_folder_path = "/mnt/testdemo810/processed"
+presentation_folder_path = "/mnt/testdemo810/presentation"
