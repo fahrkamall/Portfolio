@@ -1,0 +1,73 @@
+# Create a text widget for file date input and get the value into a variable
+dbutils.widgets.text("p_file_date", "2021-03-21")
+v_file_date = dbutils.widgets.get("p_file_date")
+
+# Switch to using the f1_presentation database in Hive metastore
+%sql
+-- Switch the SQL context to the f1_presentation database
+use hive_metastore.f1_presentation
+
+# Create a new Delta table for calculated race results if it does not exist
+%sql
+-- Create a Delta table to store calculated race results with the defined schema
+CREATE TABLE IF NOT EXISTS f1_presentation.calculated_race_results
+(
+  race_year INT,
+  team_name STRING,
+  driver_id INT,
+  driver_name STRING,
+  race_id INT,
+  position INT,
+  points INT,
+  calculated_points INT,
+  created_date TIMESTAMP,
+  updated_date TIMESTAMP
+)
+USING DELTA
+
+# Create or replace a temporary view with updated race results
+%sql
+-- Create a temporary view to show updated race results based on the latest file date
+CREATE OR REPLACE TEMP VIEW race_result_updated
+AS
+SELECT races.race_year,
+       constructors.name AS team_name,
+       drivers.driver_id,
+       drivers.name AS driver_name,
+       races.race_id,
+       results.position,
+       results.points,
+       11 - results.position AS calculated_points
+FROM f1_processed.results 
+JOIN f1_processed.drivers ON (results.driver_id = drivers.driver_id)
+JOIN f1_processed.constructors ON (results.constructor_id = constructors.constructor_id)
+JOIN f1_processed.races ON (results.race_id = races.race_id)
+WHERE results.position <= 10
+  AND results.file_date = '{v_file_date}'
+
+# Perform a merge (upsert) operation from the temporary view into the Delta table
+%sql
+-- Merge the updated results into the calculated_race_results Delta table
+MERGE INTO f1_presentation.calculated_race_results tgt
+USING race_result_updated upd
+ON (tgt.driver_id = upd.driver_id AND tgt.race_id = upd.race_id)
+WHEN MATCHED THEN
+  UPDATE SET tgt.position = upd.position,
+             tgt.points = upd.points,
+             tgt.calculated_points = upd.calculated_points,
+             tgt.updated_date = current_timestamp
+WHEN NOT MATCHED
+  THEN INSERT (race_year, team_name, driver_id, driver_name,race_id, position, points, calculated_points, created_date ) 
+       VALUES (race_year, team_name, driver_id, driver_name,race_id, position, points, calculated_points, current_timestamp)
+
+# Count the records in the temporary view to verify data
+%sql
+-- Count the number of records in the temporary view race_result_updated
+SELECT COUNT(1) FROM race_result_updated;
+
+# Count the records in the Delta table to ensure the merge was successful
+%sql
+-- Count the number of records in the Delta table calculated_race_results to confirm merge success
+SELECT COUNT(1) FROM f1_presentation.calculated_race_results;
+
+

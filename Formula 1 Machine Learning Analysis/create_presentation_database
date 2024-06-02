@@ -1,0 +1,7 @@
+CREATE DATABASE IF NOT EXISTS hive_metastore.f1_presentation
+LOCATION "mnt/testdemo810/presentation";
+
+drop database hive_metastore.f1_presentation
+
+drop table hive_metastore.f1_presentation.race_results
+
