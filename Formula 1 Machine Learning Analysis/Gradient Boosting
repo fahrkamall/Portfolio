@@ -1,0 +1,151 @@
+from pyspark.ml.feature import StringIndexer, VectorAssembler
+from pyspark.ml.classification import RandomForestClassifier
+
+# Load historical data from Delta table
+historical_data = spark.read.format("delta").load("dbfs:/user/hive/warehouse/mnt/testdemo810/presentation/calculated_race_results")
+
+# Convert string columns to numerical using StringIndexer
+team_indexer = StringIndexer(inputCol="team_name", outputCol="team_name_indexed", handleInvalid="keep")
+data_indexed = team_indexer.fit(historical_data).transform(historical_data)
+
+# Define feature columns and target column
+feature_columns = ['race_year', 'team_name_indexed', 'driver_id', 'race_id']  # Example list of feature columns
+target_column = "position"    # Example target column
+
+# Define VectorAssembler for feature columns
+assembler = VectorAssembler(inputCols=feature_columns, outputCol="features")
+
+# Transform the historical data using VectorAssembler
+data_assembled = assembler.transform(data_indexed)
+
+# Train the RandomForestClassifier model
+rf = RandomForestClassifier(labelCol=target_column, featuresCol="features", numTrees=10, maxBins=1036)
+model = rf.fit(data_assembled)
+
+# Now, let's assume you have future race data for prediction
+# Load the future race data from Delta table
+future_race_data = spark.read.format("delta").load("dbfs:/user/hive/warehouse/mnt/testdemo810/presentation/calculated_race_results")
+
+# Apply the same transformations to the future race data
+future_data_indexed = team_indexer.fit(future_race_data).transform(future_race_data)
+future_data_assembled = assembler.transform(future_data_indexed)
+
+# Make predictions on the future race data
+future_predictions = model.transform(future_data_assembled)
+
+from pyspark.ml.classification import GBTClassifier
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator
+
+# Create a Gradient Boosting Classifier model
+gbt = GBTClassifier(labelCol=target_column, featuresCol="features", maxBins=1036)
+
+# Train the model
+gbt_model = gbt.fit(training_data)
+
+# Make predictions on the test data
+gbt_predictions = gbt_model.transform(test_data)
+
+# Evaluate the model
+gbt_evaluator = MulticlassClassificationEvaluator(labelCol=target_column, predictionCol="prediction", metricName="accuracy")
+gbt_accuracy = gbt_evaluator.evaluate(gbt_predictions)
+print("Gradient Boosting Classifier Accuracy:", gbt_accuracy)
+
+# Calculate accuracy
+correct_predictions = predictions.filter(predictions["label"] == predictions["prediction"]).count()
+total_predictions = predictions.count()
+accuracy = correct_predictions / total_predictions
+print("Accuracy:", accuracy)
+
+# Extract feature importance
+feature_importance = model.featureImportances
+
+# Zip feature importance values with feature names
+feature_names = ['race_year', 'team_name_indexed', 'driver_id_indexed', 'race_id_indexed']
+feature_importance_list = list(zip(feature_names, feature_importance))
+
+# Print feature importance
+print("Feature Importance:")
+for feature, importance in feature_importance_list:
+    print(feature, ":", importance)
+
+import matplotlib.pyplot as plt
+
+# Assuming you have already computed predictions for the Gradient Boosting model
+# Extract the predicted positions from the DataFrame for Gradient Boosting model
+gbt_predicted_positions = future_predictions.select("prediction").rdd.flatMap(lambda x: x).collect()
+
+# Count the occurrences of each predicted position for Gradient Boosting model
+gbt_position_counts = {i: gbt_predicted_positions.count(i) for i in set(gbt_predicted_positions)}
+
+# Sort the positions by their counts for Gradient Boosting model
+gbt_sorted_positions = sorted(gbt_position_counts.items())
+
+# Extract the positions and their counts for Gradient Boosting model
+gbt_positions = [pos for pos, count in gbt_sorted_positions]
+gbt_counts = [count for pos, count in gbt_sorted_positions]
+
+# Plot the bar graph for Gradient Boosting model
+plt.bar(gbt_positions, gbt_counts)
+plt.xlabel("Predicted Position")
+plt.ylabel("Count")
+plt.title("Predicted Positions of Drivers (Gradient Boosting)")
+plt.show()
+
+import matplotlib.pyplot as plt
+import pandas as pd
+
+# Extract the first 50 predictions for Gradient Boosting model
+top_50_gbt_predictions = future_predictions.select("driver_id", "team_name").limit(50)
+
+# Group by driver_id and team_name, and count occurrences for Gradient Boosting model
+gbt_driver_counts = top_50_gbt_predictions.groupBy("driver_id").count().orderBy("count", ascending=False).limit(5).toPandas()
+gbt_team_counts = top_50_gbt_predictions.groupBy("team_name").count().orderBy("count", ascending=False).limit(5).toPandas()
+
+# Plotting
+plt.figure(figsize=(12, 6))
+
+# Plot dominant drivers for Gradient Boosting model
+plt.subplot(1, 2, 1)
+plt.bar(gbt_driver_counts["driver_id"], gbt_driver_counts["count"], color='skyblue')
+plt.title('Top 5 Dominant Drivers (Gradient Boosting)')
+plt.xlabel('Driver ID')
+plt.ylabel('Count')
+
+# Plot dominant teams for Gradient Boosting model
+plt.subplot(1, 2, 2)
+plt.bar(gbt_team_counts["team_name"], gbt_team_counts["count"], color='salmon')
+plt.title('Top 5 Dominant Teams (Gradient Boosting)')
+plt.xlabel('Team Name')
+plt.ylabel('Count')
+
+# Adjust layout
+plt.tight_layout()
+plt.show()
+
+import matplotlib.pyplot as plt
+import pandas as pd
+
+# Make sure to adjust the column names if they differ in your DataFrame
+future_predictions_pd = future_predictions.select("team_name", "prediction").toPandas()
+
+# Find the top 5 teams by the number of occurrences in the predictions
+top_teams = future_predictions_pd['team_name'].value_counts().nlargest(5).index
+
+# Filter the predictions to only include the top teams
+top_teams_predictions = future_predictions_pd[future_predictions_pd['team_name'].isin(top_teams)]
+
+# Create a cross-tabulation of team names and predicted positions
+team_position_crosstab = pd.crosstab(top_teams_predictions['team_name'], top_teams_predictions['prediction'])
+
+# Plotting
+team_position_crosstab.plot(kind='bar', stacked=True, figsize=(12, 8))
+plt.title('Predicted Positions for Top Dominant Teams')
+plt.xlabel('Team Name')
+plt.ylabel('Count of Predicted Positions')
+plt.legend(title='Predicted Position', bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.tight_layout()
+
+# Show plot
+plt.show()
+
+

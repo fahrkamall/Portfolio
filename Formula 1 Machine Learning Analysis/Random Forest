@@ -1,0 +1,146 @@
+from pyspark.sql import SparkSession
+from pyspark.ml.feature import VectorAssembler, StringIndexer
+from pyspark.ml.classification import RandomForestClassifier
+
+# Load historical data from Delta table
+historical_data = spark.read.format("delta").load("dbfs:/user/hive/warehouse/mnt/testdemo810/presentation/calculated_race_results")
+
+# Define feature columns and target column
+feature_columns = ['race_year', 'team_name', 'driver_id', 'race_id']  # Example list of feature columns
+target_column = "position"    # Example target column
+
+# Convert string columns to numerical using StringIndexer
+team_indexer = StringIndexer(inputCol="team_name", outputCol="team_name_indexed", handleInvalid="keep")
+driver_indexer = StringIndexer(inputCol="driver_id", outputCol="driver_id_indexed", handleInvalid="keep")
+race_indexer = StringIndexer(inputCol="race_id", outputCol="race_id_indexed", handleInvalid="keep")
+indexers = [team_indexer, driver_indexer, race_indexer]
+
+# Apply StringIndexer transformations
+data_indexed = historical_data
+for indexer in indexers:
+    data_indexed = indexer.fit(data_indexed).transform(data_indexed)
+
+# Define VectorAssembler for feature columns
+assembler = VectorAssembler(inputCols=['race_year', 'team_name_indexed', 'driver_id_indexed', 'race_id_indexed'], outputCol="features")
+
+# Transform the historical data using VectorAssembler
+data_assembled = assembler.transform(data_indexed)
+
+# Train the RandomForestClassifier model
+rf = RandomForestClassifier(labelCol=target_column, featuresCol="features", numTrees=10, maxBins=1036)
+model = rf.fit(data_assembled)
+
+# Now, let's assume you have future race data for prediction
+# Load the future race data from Delta table
+future_race_data = spark.read.format("delta").load("dbfs:/user/hive/warehouse/mnt/testdemo810/presentation/calculated_race_results")
+
+# Apply the same transformations to the future race data
+future_data_indexed = future_race_data
+for indexer in indexers:
+    future_data_indexed = indexer.fit(future_data_indexed).transform(future_data_indexed)
+future_data_assembled = assembler.transform(future_data_indexed)
+
+# Make predictions on the future race data
+future_predictions = model.transform(future_data_assembled)
+
+
+from pyspark.sql import SparkSession
+from pyspark.ml.feature import VectorAssembler, StringIndexer
+from pyspark.ml.classification import RandomForestClassifier
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator
+
+
+# Load data from Delta table
+data = spark.read.format("delta").load("dbfs:/user/hive/warehouse/mnt/testdemo810/presentation/calculated_race_results")
+
+# Define feature columns and target column
+feature_columns = ['race_year', 'team_name', 'driver_id', 'race_id']  # Example list of feature columns
+target_column = "position"    # Example target column
+
+# Convert string columns to numerical using StringIndexer
+team_indexer = StringIndexer(inputCol="team_name", outputCol="team_name_indexed", handleInvalid="keep")
+driver_indexer = StringIndexer(inputCol="driver_id", outputCol="driver_id_indexed", handleInvalid="keep")
+race_indexer = StringIndexer(inputCol="race_id", outputCol="race_id_indexed", handleInvalid="keep")
+indexers = [team_indexer, driver_indexer, race_indexer]
+
+# Apply StringIndexer transformations
+data_indexed = data
+for indexer in indexers:
+    data_indexed = indexer.fit(data_indexed).transform(data_indexed)
+
+# Define VectorAssembler for feature columns
+assembler = VectorAssembler(inputCols=['race_year', 'team_name_indexed', 'driver_id_indexed', 'race_id_indexed'], outputCol="features")
+
+# Transform the data using VectorAssembler
+data_assembled = assembler.transform(data_indexed)
+
+# Split the data into train and test sets
+(training_data, test_data) = data_assembled.randomSplit([0.7, 0.3])
+
+# Create a RandomForestClassifier model with increased maxBins
+rf = RandomForestClassifier(labelCol=target_column, featuresCol="features", numTrees=10, maxBins=1036)
+
+# Train the model
+model = rf.fit(training_data)
+
+# Make predictions on the test data
+predictions = model.transform(test_data)
+
+# Evaluate the model
+evaluator = MulticlassClassificationEvaluator(labelCol=target_column, predictionCol="prediction", metricName="accuracy")
+accuracy = evaluator.evaluate(predictions)
+print("Random Forest Classifier Accuracy:", accuracy)
+
+import matplotlib.pyplot as plt
+
+# Extract the predicted positions from the DataFrame
+predicted_positions = future_predictions.select("prediction").rdd.flatMap(lambda x: x).collect()
+
+# Count the occurrences of each predicted position
+position_counts = {i: predicted_positions.count(i) for i in set(predicted_positions)}
+
+# Sort the positions by their counts
+sorted_positions = sorted(position_counts.items())
+
+# Extract the positions and their counts
+positions = [pos for pos, count in sorted_positions]
+counts = [count for pos, count in sorted_positions]
+
+# Plot the bar graph
+plt.bar(positions, counts)
+plt.xlabel("Predicted Position")
+plt.ylabel("Count")
+plt.title("Predicted Positions of Drivers")
+plt.show()
+
+import matplotlib.pyplot as plt
+import pandas as pd
+
+# Extract the first 50 predictions
+top_50_predictions = future_predictions.select("driver_id", "team_name").limit(50)
+
+# Group by driver_id and team_name, and count occurrences
+driver_counts = top_50_predictions.groupBy("driver_id").count().orderBy("count", ascending=False).limit(5).toPandas()
+team_counts = top_50_predictions.groupBy("team_name").count().orderBy("count", ascending=False).limit(5).toPandas()
+
+# Plotting
+plt.figure(figsize=(12, 6))
+
+# Plot dominant drivers
+plt.subplot(1, 2, 1)
+plt.bar(driver_counts["driver_id"], driver_counts["count"], color='skyblue')
+plt.title('Top 5 Dominant Drivers')
+plt.xlabel('Driver ID')
+plt.ylabel('Count')
+
+# Plot dominant teams
+plt.subplot(1, 2, 2)
+plt.bar(team_counts["team_name"], team_counts["count"], color='salmon')
+plt.title('Top 5 Dominant Teams')
+plt.xlabel('Team Name')
+plt.ylabel('Count')
+
+# Adjust layout
+plt.tight_layout()
+plt.show()
+
