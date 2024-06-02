@@ -1,0 +1,39 @@
+-- Setting the context to use the Hive metastore database specifically tailored for Formula 1 presentations
+USE hive_metastore.f1_presentation;
+
+-- This query fetches statistics for each F1 team, such as the total number of races they participated in,
+-- the sum of points they earned, and their average points per race, for teams having participated in at least 100 races.
+-- The results are ordered by the average points in descending order to identify top-performing teams.
+SELECT team_name,
+       COUNT(1) AS total_races,           -- Counts the total number of races for each team
+       SUM(calculated_points) AS total_points, -- Sums up all the points each team has earned
+       AVG(calculated_points) AS avg_points     -- Calculates the average points per race for each team
+  FROM f1_presentation.calculated_race_results
+GROUP BY team_name
+HAVING COUNT(1) >= 100                         -- Includes only teams with at least 100 races
+ORDER BY avg_points DESC;                      -- Orders teams by their average points, from highest to lowest
+
+-- This query refines the above analysis by limiting the data to races that occurred between 2011 and 2020,
+-- providing a snapshot of team performance throughout this specific decade.
+SELECT team_name,
+       COUNT(1) AS total_races,
+       SUM(calculated_points) AS total_points,
+       AVG(calculated_points) AS avg_points
+  FROM f1_presentation.calculated_race_results
+ WHERE race_year BETWEEN 2011 AND 2020        -- Focuses on the races from the years 2011 to 2020
+GROUP BY team_name
+HAVING COUNT(1) >= 100
+ORDER BY avg_points DESC;
+
+-- Similarly, this query examines the performance of F1 teams from an earlier decade, 2001 to 2011,
+-- allowing for comparative analysis across different eras of the sport.
+SELECT team_name,
+       COUNT(1) AS total_races,
+       SUM(calculated_points) AS total_points,
+       AVG(calculated_points) AS avg_points
+  FROM f1_presentation.calculated_race_results
+ WHERE race_year BETWEEN 2001 AND 2011        -- Focuses on the races from the years 2001 to 2011
+GROUP BY team_name
+HAVING COUNT(1) >= 100
+ORDER BY avg_points DESC;
+

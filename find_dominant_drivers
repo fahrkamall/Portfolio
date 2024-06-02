@@ -1,0 +1,39 @@
+-- Using the Hive metastore database for Formula 1 presentations
+USE hive_metastore.f1_presentation;
+
+-- Query to select driver names and calculate total races, total points, and average points
+-- for drivers who have participated in at least 50 races, ordered by their average points in descending order
+SELECT driver_name,
+       COUNT(1) AS total_races,          -- Counting the total number of races per driver
+       SUM(calculated_points) AS total_points,  -- Summing up the points each driver has earned
+       AVG(calculated_points) AS avg_points      -- Calculating the average points per race
+  FROM f1_presentation.calculated_race_results
+GROUP BY driver_name
+HAVING COUNT(1) >= 50                          -- Filter to include only drivers with 50 or more races
+ORDER BY avg_points DESC;                       -- Sorting by average points in descending order
+
+-- Query to select driver statistics for races that occurred between 2011 and 2020
+-- including the same calculations as the previous query, but limited to this specific decade
+SELECT driver_name,
+       COUNT(1) AS total_races,
+       SUM(calculated_points) AS total_points,
+       AVG(calculated_points) AS avg_points
+  FROM f1_presentation.calculated_race_results
+ WHERE race_year BETWEEN 2011 AND 2020        -- Filtering the race results for the years 2011 to 2020
+GROUP BY driver_name
+HAVING COUNT(1) >= 50
+ORDER BY avg_points DESC;
+
+-- Query to select driver statistics for races that occurred between 2001 and 2010
+-- similar to the previous query but for the decade of 2001 to 2010
+SELECT driver_name,
+       COUNT(1) AS total_races,
+       SUM(calculated_points) AS total_points,
+       AVG(calculated_points) AS avg_points
+  FROM f1_presentation.calculated_race_results
+ WHERE race_year BETWEEN 2001 AND 2010        -- Filtering the race results for the years 2001 to 2010
+GROUP BY driver_name
+HAVING COUNT(1) >= 50
+ORDER BY avg_points DESC;
+
+
